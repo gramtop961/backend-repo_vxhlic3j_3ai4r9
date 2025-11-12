@@ -184,6 +184,32 @@ def get_cart(cart_id: str):
     return {"items": items, "total": round(total, 2)}
 
 
+class CheckoutIn(BaseModel):
+    cart_id: str
+    email: Optional[str] = None
+
+
+@app.post("/checkout")
+def checkout(payload: CheckoutIn):
+    if db is None:
+        raise HTTPException(status_code=500, detail="Database not available")
+    cart_items = list(db['cartitem'].find({"cart_id": payload.cart_id}))
+    if not cart_items:
+        raise HTTPException(status_code=400, detail="Cart is empty")
+    for i in cart_items:
+        i['id'] = str(i.pop('_id'))
+    subtotal = sum((i.get('price_snapshot',0) * i.get('quantity',1)) for i in cart_items)
+    order_doc = {
+        'cart_id': payload.cart_id,
+        'items': cart_items,
+        'subtotal': round(float(subtotal), 2),
+        'status': 'paid',
+        'email': payload.email
+    }
+    order_id = create_document('order', order_doc)
+    return {"status": "paid", "order_id": order_id}
+
+
 if __name__ == "__main__":
     import uvicorn
     port = int(os.getenv("PORT", 8000))
